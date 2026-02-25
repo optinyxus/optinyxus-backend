@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: optinyxus-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: PYTHON_VERSION
+        value: 3.10.12
+      - key: ALLOWED_ORIGINS
+        value: https://your-frontend-app.vercel.app # TODO: Update this to real Vercel domain
+      - key: JWT_SECRET
+        generateValue: true

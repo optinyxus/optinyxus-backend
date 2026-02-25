@@ -1,0 +1,41 @@
+backend/
+│
+├── app/
+│   ├── __init__.py
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── constants.py              # MarketEdge constants
+│   │   └── pricegenix_constants.py   # PriceGenix constants
+│   │
+│   ├── models/
+│   │   ├── __init__.py
+│   │   ├── market_edge_models.py     
+│   │   └── pricegenix_models.py      
+│   │
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── market_edge.py           
+│   │   └── pricegenix.py             
+│   │
+│   └── services/
+│       ├── __init__.py
+│       │
+│       ├── market_edge/
+│       │   ├── __init__.py
+│       │   ├── optimizer.py
+│       │   ├── maximize_roas.py
+│       │   ├── maximize_gmv.py
+│       │   └── minimize_spend.py
+│       │
+│       └── pricegenix/              
+│           ├── __init__.py
+│           ├── optimizer.py
+│           ├── maximize_gmv.py
+│           ├── maximize_profit.py
+│           └── maximize_profit_percent.py
+│
+├── main.py
+├── requirements.txt
+├── .gitignore
+└── venv/

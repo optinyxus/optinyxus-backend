@@ -5,14 +5,22 @@ DUAL PRODUCT BACKEND
 2. PriceGenix - Product Price Optimization
 """
 
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import market_edge, pricegenix
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+# ==================== CORS CONFIGURATION ====================
+# Read allowed origins from environment variable (comma-separated)
+# Falls back to allowing all origins if not set
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+if _raw_origins.strip() == "*":
+    ALLOWED_ORIGINS = ["*"]
+else:
+    ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 # ==================== FASTAPI APPLICATION ====================
 
@@ -43,15 +51,9 @@ app = FastAPI(
 
 # ==================== CORS MIDDLEWARE ====================
 
-allowed_origins_str = os.getenv("ALLOWED_ORIGINS", "")
-origins = [origin.strip() for origin in allowed_origins_str.split(",") if origin.strip()]
-
-if not origins:
-    origins = ["*"] # Fallback
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,8 +119,8 @@ async def root():
             }
         },
         "documentation": {
-            "swagger_ui": "http://localhost:8000/docs",
-            "redoc": "http://localhost:8000/redoc"
+            "swagger_ui": "/docs",
+            "redoc": "/redoc"
         }
     }
 
@@ -183,8 +185,7 @@ async def startup_event():
     print("💰 PriceGenix: Price Optimization")
     print("   └─ Endpoints: /api/v1/pricegenix/*")
     print("")
-    port = os.getenv("PORT", "8000")
-    print(f"📖 Documentation: http://localhost:{port}/docs")
+    print("📖 Documentation: /docs")
     print("=" * 70 + "\n")
 
 
@@ -194,3 +195,11 @@ async def shutdown_event():
     print("\n" + "=" * 70)
     print("🛑 BACKEND SHUTTING DOWN")
     print("=" * 70 + "\n")
+
+
+# ==================== ENTRY POINT ====================
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=False)

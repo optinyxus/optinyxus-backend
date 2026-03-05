@@ -8,7 +8,7 @@ import time
 from typing import Dict, Any
 from app.services.pricegenix.optimizer import (
     compute_metrics, resolve_stock_bounds, 
-    resolve_global_unit_bounds, check_constraints
+    resolve_global_unit_bounds, check_constraints, resolve_brand_stocks
 )
 from app.core.pricegenix_constants import BRANDS, PRICE_STEP, BRAND_KEYS
 
@@ -24,11 +24,14 @@ def run_maximize_profit_percent_optimization(request_data: Dict[str, Any]) -> Di
     # Get brand configs
     A, B, C, D, E, F = [BRANDS[key] for key in BRAND_KEYS]
     
+    # Resolve stock from request payload (fallbacks to defaults if not provided)
+    brand_stocks = resolve_brand_stocks(request_data)
+
     # Resolve stock bounds
-    stock_bounds = resolve_stock_bounds(request_data)
+    stock_bounds = resolve_stock_bounds(request_data, brand_stocks)
     
     # Resolve global unit bounds
-    u_min, u_max = resolve_global_unit_bounds(request_data)
+    u_min, u_max = resolve_global_unit_bounds(request_data, brand_stocks)
     
     # Create price ranges for all 6 brands
     x1_vals = np.arange(A["MnP"], A["MxP"] + 1, PRICE_STEP)
@@ -52,7 +55,7 @@ def run_maximize_profit_percent_optimization(request_data: Dict[str, Any]) -> Di
                             total += 1
                             
                             # Compute all metrics
-                            m = compute_metrics((x1, x2, x3, x4, x5, x6))
+                            m = compute_metrics((x1, x2, x3, x4, x5, x6), brand_stocks)
                             
                             # Check constraints
                             if not check_constraints(m, request_data, stock_bounds, u_min, u_max):

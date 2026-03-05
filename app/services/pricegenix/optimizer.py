@@ -4,11 +4,82 @@ PRICEGENIX - CORE OPTIMIZER FUNCTIONS
 """
 
 import math
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from app.core.pricegenix_constants import BRANDS, PRICE_STEP, ROUND_UNITS, BRAND_KEYS
 
 
-def compute_metrics(prices: Tuple[float, float, float, float, float, float]) -> Dict[str, Any]:
+def _default_brand_stocks() -> Dict[str, float]:
+    """No hardcoded stock fallback; uncapped unless payload provides stock."""
+    return {brand_key: float("inf") for brand_key in BRAND_KEYS}
+
+
+def _coerce_non_negative_number(value: Any) -> Optional[float]:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    if not math.isfinite(parsed) or parsed < 0:
+        return None
+    return parsed
+
+
+def _resolve_row_brand_key(row: Dict[str, Any]) -> Optional[str]:
+    candidates = [
+        row.get("brand"),
+        row.get("article"),
+        row.get("article_no"),
+        row.get("articleNo")
+    ]
+
+    for candidate in candidates:
+        normalized = str(candidate or "").strip().lower()
+        if not normalized:
+            continue
+        for brand_key in BRAND_KEYS:
+            if brand_key.lower() in normalized:
+                return brand_key
+    return None
+
+
+def resolve_brand_stocks(request: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Resolve dynamic per-brand stock from request payload table_data.
+    Falls back to configured constants when payload does not provide stock.
+    """
+    stock_by_brand = _default_brand_stocks()
+    table_data = request.get("table_data")
+    if not isinstance(table_data, list):
+        return stock_by_brand
+
+    aggregated = {brand_key: 0.0 for brand_key in BRAND_KEYS}
+    has_payload_stock = {brand_key: False for brand_key in BRAND_KEYS}
+
+    for row in table_data:
+        if not isinstance(row, dict):
+            continue
+        brand_key = _resolve_row_brand_key(row)
+        if not brand_key:
+            continue
+
+        stock = _coerce_non_negative_number(row.get("stock"))
+        if stock is None:
+            continue
+
+        aggregated[brand_key] += stock
+        has_payload_stock[brand_key] = True
+
+    for brand_key in BRAND_KEYS:
+        if has_payload_stock[brand_key]:
+            stock_by_brand[brand_key] = aggregated[brand_key]
+
+    return stock_by_brand
+
+
+def compute_metrics(
+    prices: Tuple[float, float, float, float, float, float],
+    brand_stocks: Dict[str, float] = None
+) -> Dict[str, Any]:
     """
     Compute all metrics for given prices
     
@@ -19,6 +90,7 @@ def compute_metrics(prices: Tuple[float, float, float, float, float, float]) -> 
         Dictionary with all computed metrics
     """
     x1, x2, x3, x4, x5, x6 = prices
+    stock_by_brand = brand_stocks or _default_brand_stocks()
     
     # Get brand configs
     A, B, C, D, E, F = [BRANDS[key] for key in BRAND_KEYS]
@@ -49,12 +121,12 @@ def compute_metrics(prices: Tuple[float, float, float, float, float, float]) -> 
         n6 = math.floor(n6)
     
     # HARD STOCK CAP
-    n1 = min(n1, A["stock"])
-    n2 = min(n2, B["stock"])
-    n3 = min(n3, C["stock"])
-    n4 = min(n4, D["stock"])
-    n5 = min(n5, E["stock"])
-    n6 = min(n6, F["stock"])
+    n1 = min(n1, stock_by_brand[BRAND_KEYS[0]])
+    n2 = min(n2, stock_by_brand[BRAND_KEYS[1]])
+    n3 = min(n3, stock_by_brand[BRAND_KEYS[2]])
+    n4 = min(n4, stock_by_brand[BRAND_KEYS[3]])
+    n5 = min(n5, stock_by_brand[BRAND_KEYS[4]])
+    n6 = min(n6, stock_by_brand[BRAND_KEYS[5]])
     
     # GMV (revenue)
     g1 = n1 * x1
@@ -125,7 +197,7 @@ def compute_metrics(prices: Tuple[float, float, float, float, float, float]) -> 
     }
 
 
-def resolve_stock_bounds(request: Dict[str, Any]) -> Tuple:
+def resolve_stock_bounds(request: Dict[str, Any], brand_stocks: Dict[str, float] = None) -> Tuple:
     """
     Convert flexible stock bounds (percent/absolute) into concrete unit bounds
     
@@ -134,9 +206,10 @@ def resolve_stock_bounds(request: Dict[str, Any]) -> Tuple:
     """
     bounds = []
     brand_keys = ["bosch", "haier", "ifb", "lg", "samsung", "whirlpool"]
+    stock_by_brand = brand_stocks or _default_brand_stocks()
     
     for i, brand_key in enumerate(brand_keys):
-        stock = BRANDS[BRAND_KEYS[i]]["stock"]
+        stock = stock_by_brand[BRAND_KEYS[i]]
         
         # Min bound
         n_min_config = request.get(f"{brand_key}_n_min", {"type": "percent", "value": 0.0})
@@ -161,9 +234,13 @@ def resolve_stock_bounds(request: Dict[str, Any]) -> Tuple:
     return tuple(bounds)
 
 
-def resolve_global_unit_bounds(request: Dict[str, Any]) -> Tuple[float, float]:
+def resolve_global_unit_bounds(
+    request: Dict[str, Any],
+    brand_stocks: Dict[str, float] = None
+) -> Tuple[float, float]:
     """Resolve global unit bounds (percent or absolute)"""
-    total_stock = sum(BRANDS[key]["stock"] for key in BRAND_KEYS)
+    stock_by_brand = brand_stocks or _default_brand_stocks()
+    total_stock = sum(stock_by_brand[key] for key in BRAND_KEYS)
     
     # Min units
     u_min_config = request.get("units_min")

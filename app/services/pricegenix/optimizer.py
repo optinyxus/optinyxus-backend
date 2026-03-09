@@ -197,6 +197,95 @@ def compute_metrics(
     }
 
 
+def _safe_div(numerator: float, denominator: float) -> float:
+    return numerator / denominator if denominator else 0.0
+
+
+def calculate_portfolio_metrics(metrics: Dict[str, Any]) -> Dict[str, float]:
+    """
+    Calculate portfolio-level metrics required by the API response.
+    """
+    brand_count = len(BRAND_KEYS)
+    total_sales = sum(metrics.get(f"g{i}", 0.0) for i in range(1, brand_count + 1))
+    total_profit = sum(metrics.get(f"p{i}", 0.0) for i in range(1, brand_count + 1))
+    total_units = sum(metrics.get(f"n{i}", 0.0) for i in range(1, brand_count + 1))
+    total_discount = float(metrics.get("d_total", 0.0))
+
+    portfolio_margin_percent = _safe_div(total_profit, total_sales) * 100.0
+    portfolio_discount_percent = _safe_div(total_discount, total_discount + total_sales) * 100.0
+    test_price = _safe_div(total_sales, total_units)
+    discount_per_unit = _safe_div(total_discount, total_units)
+    profit_per_unit = _safe_div(total_profit, total_units)
+    mop = test_price + discount_per_unit
+    nlc = test_price - profit_per_unit
+
+    return {
+        "total_sales": total_sales,
+        "total_profit": total_profit,
+        "total_units": total_units,
+        "portfolio_margin_percent": portfolio_margin_percent,
+        "portfolio_discount_total": total_discount,
+        "portfolio_discount_percent": portfolio_discount_percent,
+        "portfolio_test_price": test_price,
+        "portfolio_mop": mop,
+        "portfolio_nlc": nlc,
+        "portfolio_discount_per_unit": discount_per_unit,
+        "portfolio_profit_per_unit": profit_per_unit,
+    }
+
+
+def calculate_brand_ped_metrics(
+    prices: Tuple[float, float, float, float, float, float],
+    metrics: Dict[str, Any]
+) -> Dict[str, Dict[str, float]]:
+    """
+    Calculate per-brand PED, PED basis, saleability scale, and saleability rank.
+    """
+    brand_keys_response = [brand.lower() for brand in BRAND_KEYS]
+    ped_values = []
+    epsilon = 1e-12
+
+    for i, brand_key in enumerate(BRAND_KEYS):
+        units = float(metrics.get(f"n{i + 1}", 0.0))
+        price = float(prices[i])
+        demand_slope = float(BRANDS[brand_key]["m"])
+        ped_value = demand_slope * price / (units if abs(units) > epsilon else epsilon)
+        ped_values.append((brand_keys_response[i], ped_value))
+
+    series = [value for _, value in ped_values]
+    min_ped = min(series) if series else 0.0
+    max_ped = max(series) if series else 0.0
+    ped_denominator = min_ped - max_ped
+    if abs(ped_denominator) <= epsilon:
+        ped_denominator = -epsilon
+    ped_basis = 100.0 / ped_denominator
+
+    saleability_scale = {
+        key: (ped_value - max_ped) * ped_basis
+        for key, ped_value in ped_values
+    }
+    ranked_keys = sorted(brand_keys_response, key=lambda key: saleability_scale[key], reverse=True)
+    ranks = {key: rank for rank, key in enumerate(ranked_keys, start=1)}
+
+    brand_ped = {key: ped_value for key, ped_value in ped_values}
+    print("\n===== PRICEGENIX PED DEBUG =====")
+    print(f"PED Series: {series}")
+    print(f"Min PED: {min_ped}")
+    print(f"Max PED: {max_ped}")
+    print(f"PED_Basis: {ped_basis}")
+    print(f"BrandPED: {brand_ped}")
+    print(f"SaleabilityScale: {saleability_scale}")
+
+    return {
+        key: {
+            "ped_basis": ped_basis,
+            "saleability_scale": saleability_scale[key],
+            "saleability_rank": ranks[key],
+        }
+        for key in brand_keys_response
+    }
+
+
 def resolve_stock_bounds(request: Dict[str, Any], brand_stocks: Dict[str, float] = None) -> Tuple:
     """
     Convert flexible stock bounds (percent/absolute) into concrete unit bounds

@@ -183,6 +183,9 @@ class BrandResult(BaseModel):
     profit: float
     margin_percent: float
     discount_percent: float
+    ped_basis: float
+    saleability_scale: float
+    saleability_rank: int
 
 
 class PriceGenixResponse(BaseModel):
@@ -197,6 +200,12 @@ class PriceGenixResponse(BaseModel):
     portfolio_margin_percent: float
     total_units: int
     portfolio_discount_percent: float
+    portfolio_discount_total: float
+    portfolio_test_price: float
+    portfolio_mop: float
+    portfolio_nlc: float
+    portfolio_discount_per_unit: float
+    portfolio_profit_per_unit: float
     
     # Individual brand results
     bosch: BrandResult

@@ -31,6 +31,18 @@ def _log_request(endpoint: str, payload):
 
 def _log_response(payload):
     print("\n===== RESPONSE SENT =====")
+    if isinstance(payload, dict) and str(payload.get("status", "")).lower() == "success":
+        print("\n===== PORTFOLIO METRICS =====")
+        print(f"Total Units: {payload.get('total_units')}")
+        print(f"Total Sales: {payload.get('total_gmv')}")
+        print(f"Total Profit: {payload.get('total_profit')}")
+        print(f"Discount: {payload.get('portfolio_discount_total')}")
+        print(f"Discount %: {payload.get('portfolio_discount_percent')}")
+        print(f"Test Price: {payload.get('portfolio_test_price')}")
+        print(f"MOP: {payload.get('portfolio_mop')}")
+        print(f"NLC: {payload.get('portfolio_nlc')}")
+        print(f"Discount/Unit: {payload.get('portfolio_discount_per_unit')}")
+        print(f"Profit/Unit: {payload.get('portfolio_profit_per_unit')}")
     print("Processed Result:")
     print(_format_json(payload))
     print("Final Response Payload:")

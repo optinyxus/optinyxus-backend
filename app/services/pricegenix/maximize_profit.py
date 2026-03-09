@@ -8,7 +8,8 @@ import time
 from typing import Dict, Any
 from app.services.pricegenix.optimizer import (
     compute_metrics, resolve_stock_bounds, 
-    resolve_global_unit_bounds, check_constraints, resolve_brand_stocks
+    resolve_global_unit_bounds, check_constraints, resolve_brand_stocks,
+    calculate_portfolio_metrics, calculate_brand_ped_metrics
 )
 from app.core.pricegenix_constants import BRANDS, PRICE_STEP, BRAND_KEYS
 
@@ -86,22 +87,28 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
     
     m = best["metrics"]
     
-    # Calculate portfolio metrics
-    total_gmv = m["g1"] + m["g2"] + m["g3"] + m["g4"] + m["g5"] + m["g6"]
-    total_profit = m["p1"] + m["p2"] + m["p3"] + m["p4"] + m["p5"] + m["p6"]
-    portfolio_margin = (total_profit / total_gmv * 100) if total_gmv > 0 else 0
-    total_units = int(m["n1"] + m["n2"] + m["n3"] + m["n4"] + m["n5"] + m["n6"])
+    portfolio_metrics = calculate_portfolio_metrics(m)
+    ped_metrics = calculate_brand_ped_metrics(
+        (best["x1"], best["x2"], best["x3"], best["x4"], best["x5"], best["x6"]),
+        m
+    )
     
     # Format response
     return {
         "status": "success",
         "message": "Optimal solution found - Total Profit maximized",
         "objective": "maximize_profit",
-        "total_gmv": total_gmv,
-        "total_profit": total_profit,
-        "portfolio_margin_percent": portfolio_margin,
-        "total_units": total_units,
-        "portfolio_discount_percent": m["d_pct"] * 100,
+        "total_gmv": portfolio_metrics["total_sales"],
+        "total_profit": portfolio_metrics["total_profit"],
+        "portfolio_margin_percent": portfolio_metrics["portfolio_margin_percent"],
+        "total_units": int(portfolio_metrics["total_units"]),
+        "portfolio_discount_percent": portfolio_metrics["portfolio_discount_percent"],
+        "portfolio_discount_total": portfolio_metrics["portfolio_discount_total"],
+        "portfolio_test_price": portfolio_metrics["portfolio_test_price"],
+        "portfolio_mop": portfolio_metrics["portfolio_mop"],
+        "portfolio_nlc": portfolio_metrics["portfolio_nlc"],
+        "portfolio_discount_per_unit": portfolio_metrics["portfolio_discount_per_unit"],
+        "portfolio_profit_per_unit": portfolio_metrics["portfolio_profit_per_unit"],
         
         "bosch": {
             "price": best["x1"],
@@ -109,7 +116,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g1"],
             "profit": m["p1"],
             "margin_percent": m["p1_pct"] * 100,
-            "discount_percent": m["d1_pct_brand"] * 100
+            "discount_percent": m["d1_pct_brand"] * 100,
+            "ped_basis": ped_metrics["bosch"]["ped_basis"],
+            "saleability_scale": ped_metrics["bosch"]["saleability_scale"],
+            "saleability_rank": ped_metrics["bosch"]["saleability_rank"]
         },
         "haier": {
             "price": best["x2"],
@@ -117,7 +127,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g2"],
             "profit": m["p2"],
             "margin_percent": m["p2_pct"] * 100,
-            "discount_percent": m["d2_pct_brand"] * 100
+            "discount_percent": m["d2_pct_brand"] * 100,
+            "ped_basis": ped_metrics["haier"]["ped_basis"],
+            "saleability_scale": ped_metrics["haier"]["saleability_scale"],
+            "saleability_rank": ped_metrics["haier"]["saleability_rank"]
         },
         "ifb": {
             "price": best["x3"],
@@ -125,7 +138,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g3"],
             "profit": m["p3"],
             "margin_percent": m["p3_pct"] * 100,
-            "discount_percent": m["d3_pct_brand"] * 100
+            "discount_percent": m["d3_pct_brand"] * 100,
+            "ped_basis": ped_metrics["ifb"]["ped_basis"],
+            "saleability_scale": ped_metrics["ifb"]["saleability_scale"],
+            "saleability_rank": ped_metrics["ifb"]["saleability_rank"]
         },
         "lg": {
             "price": best["x4"],
@@ -133,7 +149,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g4"],
             "profit": m["p4"],
             "margin_percent": m["p4_pct"] * 100,
-            "discount_percent": m["d4_pct_brand"] * 100
+            "discount_percent": m["d4_pct_brand"] * 100,
+            "ped_basis": ped_metrics["lg"]["ped_basis"],
+            "saleability_scale": ped_metrics["lg"]["saleability_scale"],
+            "saleability_rank": ped_metrics["lg"]["saleability_rank"]
         },
         "samsung": {
             "price": best["x5"],
@@ -141,7 +160,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g5"],
             "profit": m["p5"],
             "margin_percent": m["p5_pct"] * 100,
-            "discount_percent": m["d5_pct_brand"] * 100
+            "discount_percent": m["d5_pct_brand"] * 100,
+            "ped_basis": ped_metrics["samsung"]["ped_basis"],
+            "saleability_scale": ped_metrics["samsung"]["saleability_scale"],
+            "saleability_rank": ped_metrics["samsung"]["saleability_rank"]
         },
         "whirlpool": {
             "price": best["x6"],
@@ -149,7 +171,10 @@ def run_maximize_profit_optimization(request_data: Dict[str, Any]) -> Dict[str, 
             "gmv": m["g6"],
             "profit": m["p6"],
             "margin_percent": m["p6_pct"] * 100,
-            "discount_percent": m["d6_pct_brand"] * 100
+            "discount_percent": m["d6_pct_brand"] * 100,
+            "ped_basis": ped_metrics["whirlpool"]["ped_basis"],
+            "saleability_scale": ped_metrics["whirlpool"]["saleability_scale"],
+            "saleability_rank": ped_metrics["whirlpool"]["saleability_rank"]
         },
         
         "optimization_time": round(end_time - start_time, 2),
